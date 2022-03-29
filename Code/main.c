@@ -27,7 +27,7 @@ int main (int argc, char* argv[]){
     int nodecount;
     int local_nodecount;
     double *r, *r_pre, *contribution;
-    double *local_r, *local_r_pre, *local_contribution;
+    double *local_r, *local_contribution;
     int i, j;
     double damp_const;
     double error;
@@ -62,11 +62,10 @@ int main (int argc, char* argv[]){
     if (node_init(&nodehead, 0, nodecount)) return 254;
     // initialize variables
     if (my_rank == 0) {
-        r = malloc(nodecount * sizeof(double));
-        r_pre = malloc(nodecount * sizeof(double));
+        r = malloc((local_nodecount * comm_sz) * sizeof(double));
+        r_pre = malloc((local_nodecount * comm_sz) * sizeof(double));
     }
     local_r = malloc(local_nodecount * sizeof(double));
-    local_r_pre = malloc(local_nodecount * sizeof(double));
     local_contribution = malloc(local_nodecount * sizeof(double));
     for ( i = 0; i < local_nodecount; ++i) 
         local_r[i] = 1.0 / nodecount;
@@ -78,7 +77,7 @@ int main (int argc, char* argv[]){
             local_r[index] = 0;
         }
     }
-    contribution = malloc(nodecount * sizeof(double));
+    contribution = malloc((local_nodecount * comm_sz) * sizeof(double));
     if (my_rank == 0) {
         for ( i = 0; i < nodecount; ++i) {
             contribution[i] = r[i] / nodehead[i].num_out_links * DAMPING_FACTOR;
@@ -92,7 +91,6 @@ int main (int argc, char* argv[]){
     MPI_Barrier(comm);
     GET_TIME(start);
     while(done != 1){
-        vec_cp(local_r, local_r_pre, local_nodecount);
         int offset = local_nodecount*my_rank;
         // update the local r values
         for ( i = 0; i < local_nodecount - node_diff; ++i){
@@ -105,10 +103,10 @@ int main (int argc, char* argv[]){
         for ( i=0; i<local_nodecount - node_diff; ++i){
             local_contribution[i] = local_r[i] / nodehead[i+offset].num_out_links * DAMPING_FACTOR;
         }
-        MPI_Allgather(local_contribution, local_nodecount-node_diff, MPI_DOUBLE,
-                    contribution, local_nodecount-node_diff, MPI_DOUBLE, comm);
-        MPI_Gather(local_r, local_nodecount-node_diff, MPI_DOUBLE,
-                    r, local_nodecount-node_diff, MPI_DOUBLE, 0, comm);
+        MPI_Allgather(local_contribution, local_nodecount, MPI_DOUBLE,
+                    contribution, local_nodecount, MPI_DOUBLE, comm);
+        MPI_Gather(local_r, local_nodecount, MPI_DOUBLE,
+                    r, local_nodecount, MPI_DOUBLE, 0, comm);
         // Rank 0 checks for error and broadcasts if converged
         if (my_rank == 0) {
             if (rel_error(r, r_pre, nodecount) < EPSILON) {
@@ -132,11 +130,10 @@ int main (int argc, char* argv[]){
     node_destroy(nodehead, nodecount);
     free(contribution);
     free(local_r);
-    free(r_pre);
-    free(local_r_pre);
     free(local_contribution);
     if (my_rank == 0) {
         free(r);
+        free(r_pre);
     }
 
     MPI_Finalize();

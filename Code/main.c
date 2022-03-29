@@ -5,6 +5,7 @@
 #include <math.h>
 #include <mpi.h>
 #include "Lab4_IO.h"
+#include "timer.h"
 
 #define EPSILON 0.00001
 #define DAMPING_FACTOR 0.85
@@ -36,12 +37,12 @@ int main (int argc, char* argv[]){
     int done = 0;
 
     int my_rank, comm_sz;
-    MPI_COMM comm;
+    MPI_Comm comm;
 
     double start;
     double end;
 
-    MP_Init(NULL, NULL);
+    MPI_Init(NULL, NULL);
     comm = MPI_COMM_WORLD;
     MPI_Comm_size(comm, &comm_sz);
     MPI_Comm_rank(comm, &my_rank);
@@ -55,7 +56,7 @@ int main (int argc, char* argv[]){
     fclose(ip);
 
     local_nodecount = nodecount/comm_sz;
-    if (local_nodecount * comm_sz) != nodecount {
+    if ((local_nodecount * comm_sz) != nodecount) {
         local_nodecount++;
     }
     
@@ -72,7 +73,7 @@ int main (int argc, char* argv[]){
         local_r[i] = 1.0 / nodecount;
     if (my_rank == comm_sz-1) {
         node_diff = (local_nodecount * comm_sz) - nodecount;
-        for ( i = 0; i < ; ++i) {
+        for ( i = 0; i < node_diff; ++i) {
             int index = local_nodecount - 1;
             index -= i;
             local_r[index] = 0;
@@ -108,7 +109,7 @@ int main (int argc, char* argv[]){
         if (my_rank == 0) {
             if (rel_error(r, r_pre, nodecount) < EPSILON) {
                 done = 1;
-                MPI_BCast(done, 1, MPI_INTEGER, 0, comm)
+                MPI_Bcast(&done, 1, MPI_INT, 0, comm);
             } else {
                 vec_cp(r, r_pre, nodecount);
             }
@@ -128,7 +129,9 @@ int main (int argc, char* argv[]){
     free(local_r);
     free(r_pre);
     free(local_r_pre);
-    free(local_contribution)
+    free(local_contribution);
 
     MPI_Finalize();
     return 0;
+}
+

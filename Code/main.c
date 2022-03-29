@@ -41,7 +41,6 @@ int main (int argc, char* argv[]){
 
     double start;
     double end;
-
     MPI_Init(NULL, NULL);
     comm = MPI_COMM_WORLD;
     MPI_Comm_size(comm, &comm_sz);
@@ -80,10 +79,14 @@ int main (int argc, char* argv[]){
         }
     }
     contribution = malloc(nodecount * sizeof(double));
-    for ( i = 0; i < nodecount; ++i)
-        contribution[i] = r[i] / nodehead[i].num_out_links * DAMPING_FACTOR;
+    if (my_rank == 0) {
+        for ( i = 0; i < nodecount; ++i) {
+            contribution[i] = r[i] / nodehead[i].num_out_links * DAMPING_FACTOR;
+        }
+    }
+    MPI_Barrier(comm);
+    MPI_Bcast(contribution, nodecount, MPI_DOUBLE, 0, comm);
     damp_const = (1.0 - DAMPING_FACTOR) / nodecount;
-
 
     // CORE CALCULATION
     MPI_Barrier(comm);
@@ -106,32 +109,36 @@ int main (int argc, char* argv[]){
                     contribution, local_nodecount-node_diff, MPI_DOUBLE, comm);
         MPI_Gather(local_r, local_nodecount-node_diff, MPI_DOUBLE,
                     r, local_nodecount-node_diff, MPI_DOUBLE, 0, comm);
+        // Rank 0 checks for error and broadcasts if converged
         if (my_rank == 0) {
             if (rel_error(r, r_pre, nodecount) < EPSILON) {
                 done = 1;
-                MPI_Bcast(&done, 1, MPI_INT, 0, comm);
             } else {
+                done = 0;
                 vec_cp(r, r_pre, nodecount);
             }
         }
-        MPI_Barrier(comm);
+        MPI_Bcast(&done, 1, MPI_INT, 0, comm);
     }
     GET_TIME(end);
 
     // Save the result
-    if (my_rank ==0)
+    if (my_rank ==0) {
         Lab4_saveoutput(r, nodecount, end-start);
+    }
 
     // post processing
+    MPI_Barrier(comm);
     node_destroy(nodehead, nodecount);
     free(contribution);
-    free(r);
     free(local_r);
     free(r_pre);
     free(local_r_pre);
     free(local_contribution);
+    if (my_rank == 0) {
+        free(r);
+    }
 
     MPI_Finalize();
     return 0;
 }
-
